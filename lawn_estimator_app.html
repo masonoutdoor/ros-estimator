@@ -1,0 +1,454 @@
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  :root{
+    --ink:#16241a; --turf:#3a7d34; --turf-deep:#2c5e27; --turf-bright:#5aa84f;
+    --sun:#e9b949; --soil:#8a6a4f; --paper:#f6f4ec; --card:#ffffff;
+    --line:#e3e0d4; --muted:#6f7268; --good:#2c8a3d; --warn:#c0612a; --bad:#b8412f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--paper); color:var(--ink); line-height:1.45;
+    padding-bottom:90px; max-width:520px; margin:0 auto;
+  }
+  .topbar{
+    position:sticky; top:0; z-index:30; background:var(--turf-deep);
+    color:#fff; padding:14px 18px 12px; display:flex; align-items:center; gap:10px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+  }
+  .topbar h1{font-size:18px; margin:0; font-weight:800; letter-spacing:.2px; flex:1}
+  .blade{font-size:20px}
+  .screen{display:none; padding:16px 16px 0}
+  .screen.active{display:block}
+  /* service picker */
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:6px}
+  .svc{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:18px 14px; text-align:left; cursor:pointer; transition:transform .08s;
+    display:flex; flex-direction:column; gap:6px; min-height:96px;
+  }
+  .svc:active{transform:scale(.97)}
+  .svc .emoji{font-size:26px}
+  .svc .name{font-weight:700; font-size:15px}
+  .svc .sub{font-size:12px; color:var(--muted)}
+  .svc.full{grid-column:1/3; flex-direction:row; align-items:center; gap:14px; min-height:auto}
+  .svc.full .emoji{font-size:24px}
+  /* forms */
+  .field{margin:14px 0}
+  .field label{display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--ink)}
+  .field .hint{font-size:11.5px; color:var(--muted); font-weight:400; margin-top:3px}
+  input[type=text],input[type=number],select{
+    width:100%; font-size:17px; padding:12px 14px; border:1.5px solid var(--line);
+    border-radius:12px; background:#fff; color:var(--ink); -webkit-appearance:none; appearance:none;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--turf-bright)}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%236f7268' stroke-width='2' fill='none' stroke-linecap='round'/></svg>"); background-repeat:no-repeat; background-position:right 14px center; padding-right:34px}
+  /* toggle button groups */
+  .btns{display:flex; gap:8px; flex-wrap:wrap}
+  .btns.col{flex-direction:column}
+  .opt{
+    flex:1; min-width:64px; text-align:center; padding:11px 10px; border:1.5px solid var(--line);
+    border-radius:11px; background:#fff; font-size:14px; font-weight:600; cursor:pointer; color:var(--ink);
+    transition:all .1s;
+  }
+  .opt:active{transform:scale(.96)}
+  .opt.on{background:var(--turf); color:#fff; border-color:var(--turf)}
+  .toggle{
+    display:flex; align-items:center; justify-content:space-between; padding:13px 15px;
+    border:1.5px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; font-weight:600; font-size:15px;
+  }
+  .toggle .pill{width:46px; height:27px; border-radius:14px; background:#d8d6c9; position:relative; transition:background .15s; flex:none}
+  .toggle .pill::after{content:""; position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:#fff; transition:transform .15s; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .toggle.on .pill{background:var(--turf)}
+  .toggle.on .pill::after{transform:translateX(19px)}
+  /* readout */
+  .readout{background:var(--card); border:1px solid var(--line); border-radius:18px; padding:6px 18px 18px; margin:18px 0}
+  .rrow{display:flex; justify-content:space-between; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--line)}
+  .rrow:last-child{border-bottom:none}
+  .rrow .k{font-size:13px; color:var(--muted)}
+  .rrow .v{font-size:18px; font-weight:700}
+  .rrow.target .v{color:var(--turf-deep)}
+  .rrow.quote{align-items:center}
+  .rrow.quote input{width:120px; font-size:22px; font-weight:800; text-align:right; padding:8px 12px; color:var(--turf-deep); border-color:var(--sun); border-width:2px}
+  .rrow.rate .v{font-size:22px; font-weight:800}
+  .rate-note{font-size:12.5px; text-align:center; padding:8px 12px; border-radius:10px; margin-top:4px; font-weight:600}
+  .rate-note.good{background:#e7f3e8; color:var(--good)}
+  .rate-note.warn{background:#fbeede; color:var(--warn)}
+  .rate-note.bad{background:#f8e3de; color:var(--bad)}
+  /* buttons */
+  .btn{display:block; width:100%; text-align:center; padding:15px; border-radius:14px; font-size:16px; font-weight:700; border:none; cursor:pointer; margin-top:10px}
+  .btn.primary{background:var(--turf); color:#fff}
+  .btn.ghost{background:transparent; color:var(--turf-deep); border:1.5px solid var(--turf)}
+  .btn:active{transform:scale(.98)}
+  .back{background:none; border:none; color:#fff; font-size:15px; font-weight:600; cursor:pointer; padding:0; display:flex; align-items:center; gap:4px}
+  /* saved list */
+  .cust{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:10px}
+  .cust h3{margin:0 0 2px; font-size:16px}
+  .cust .meta{font-size:12px; color:var(--muted); margin-bottom:8px}
+  .qitem{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:14px}
+  .qitem .svc-tag{font-weight:600}
+  .qitem .amt{font-weight:700; color:var(--turf-deep)}
+  .empty{text-align:center; color:var(--muted); padding:50px 20px; font-size:15px}
+  .empty .big{font-size:40px; margin-bottom:10px}
+  /* bottom nav */
+  .nav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:520px; display:flex; background:#fff; border-top:1px solid var(--line); z-index:30}
+  .nav button{flex:1; background:none; border:none; padding:11px 0 14px; font-size:11px; font-weight:600; color:var(--muted); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px}
+  .nav button.on{color:var(--turf)}
+  .nav .ic{font-size:21px}
+  .section-title{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:20px 0 4px}
+  .save-row{display:flex; gap:10px}
+  .save-row .btn{margin-top:0}
+  dialog{border:none; border-radius:18px; padding:22px; max-width:340px; width:90%; box-shadow:0 20px 50px rgba(0,0,0,.3)}
+  dialog::backdrop{background:rgba(20,30,20,.45)}
+  .toast{position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:11px 20px; border-radius:30px; font-size:14px; font-weight:600; z-index:50; opacity:0; transition:opacity .2s; pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+
+<div class="topbar">
+  <span class="blade">🌿</span>
+  <h1 id="title">Yard Quotes</h1>
+  <button class="back" id="backBtn" style="display:none" onclick="goHome()">‹ Done</button>
+</div>
+
+<!-- HOME: service picker -->
+<div class="screen active" id="home">
+  <div class="grid" id="svcGrid"></div>
+  <div class="section-title">Settings</div>
+  <div class="svc full" onclick="showScreen('settings')">
+    <span class="emoji">⚙️</span>
+    <div><div class="name">Rates &amp; defaults</div><div class="sub">Tune your pricing, target $/hr, minimums</div></div>
+  </div>
+</div>
+
+<!-- ESTIMATOR -->
+<div class="screen" id="est"></div>
+
+<!-- SAVED -->
+<div class="screen" id="saved"></div>
+
+<!-- SETTINGS -->
+<div class="screen" id="settings"></div>
+
+<div class="nav">
+  <button id="nav-home" class="on" onclick="showScreen('home')"><span class="ic">🏡</span>Estimate</button>
+  <button id="nav-saved" onclick="renderSaved();showScreen('saved')"><span class="ic">📋</span>Customers</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<dialog id="saveDlg">
+  <h3 style="margin:0 0 14px">Save quote</h3>
+  <div class="field"><label>Customer name</label><input type="text" id="custName" placeholder="e.g. Brook Ln — Smith" autocomplete="off"></div>
+  <div class="field"><label>Address / note (optional)</label><input type="text" id="custAddr" placeholder="2909 Brook Ln"></div>
+  <div class="save-row">
+    <button class="btn ghost" onclick="saveDlg.close()">Cancel</button>
+    <button class="btn primary" onclick="confirmSave()">Save</button>
+  </div>
+</dialog>
+
+<script>
+/* ---------- persistent storage (per device) ---------- */
+const DB = {
+  async getSettings(){ try{const r=await window.storage.get('settings'); return r?JSON.parse(r.value):null}catch(e){return null} },
+  async setSettings(s){ try{await window.storage.set('settings', JSON.stringify(s))}catch(e){} },
+  async listQuotes(){ try{const r=await window.storage.list('quote:'); if(!r||!r.keys)return [];
+      const out=[]; for(const k of r.keys){ try{const v=await window.storage.get(k); if(v)out.push(JSON.parse(v.value))}catch(e){} } return out; }catch(e){return []} },
+  async saveQuote(q){ try{await window.storage.set('quote:'+q.id, JSON.stringify(q))}catch(e){} },
+  async delQuote(id){ try{await window.storage.delete('quote:'+id)}catch(e){} }
+};
+
+/* ---------- default rates (mirror the spreadsheet) ---------- */
+const DEFAULTS = {
+  targetHr:95, jobMin:45, matMarkup:0.30, biweekly:0.30, fuel:0,
+  minPerAcre:90, fcLight:0.25, fcMod:0.50, fcHeavy:1.00, weedAdd:25,
+  bushS:8, bushM:15, bushL:25, bushMin:75, haul:35,
+  fertK:12, seedK:18, aerK:16, soilCost:35, soilSpread:30,
+  mulch:{"Hardwood Native":120,"Shredded Hardwood":135,"Black Dyed":145,"Brown Dyed":145,"Red Dyed":145,"Cedar Mulch":160,"Pine Bark":165}
+};
+let R = {...DEFAULTS};
+
+const SERVICES = [
+  {id:'mow',  emoji:'🚜', name:'Mowing',        sub:'per visit'},
+  {id:'bush', emoji:'✂️', name:'Bush Trimming', sub:'per bush'},
+  {id:'mulch',emoji:'🪵', name:'Mulch',         sub:'per yard'},
+  {id:'fert', emoji:'🌱', name:'Fert / Seed',   sub:'per sq ft'},
+  {id:'soil', emoji:'🟤', name:'Topsoil',       sub:'per yard'},
+];
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const money=n=>'$'+Math.round(n).toLocaleString();
+const money2=n=>'$'+(Math.round(n*100)/100).toFixed(2);
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('#'+id).classList.add('active');
+  $('#nav-home').classList.toggle('on',id==='home'||id==='est');
+  $('#nav-saved').classList.toggle('on',id==='saved');
+  $('#backBtn').style.display=(id==='est'||id==='settings')?'block':'none';
+  $('#title').textContent = id==='saved'?'Customers' : id==='settings'?'Rates & defaults' : 'Yard Quotes';
+  window.scrollTo(0,0);
+}
+function goHome(){showScreen('home')}
+
+/* ---------- home grid ---------- */
+function renderHome(){
+  $('#svcGrid').innerHTML = SERVICES.map(s=>`
+    <button class="svc" onclick="openEst('${s.id}')">
+      <span class="emoji">${s.emoji}</span>
+      <span class="name">${s.name}</span>
+      <span class="sub">${s.sub}</span>
+    </button>`).join('');
+}
+
+/* ---------- estimator state ---------- */
+let cur = null; // {svc, inputs, result}
+
+function openEst(svc){
+  cur = {svc, inputs:defaultInputs(svc)};
+  renderEst();
+  showScreen('est');
+}
+function defaultInputs(svc){
+  switch(svc){
+    case 'mow':   return {sqft:'', mowable:65, freq:'Weekly', firstcut:'None', weed:false, minutes:0};
+    case 'bush':  return {s:0,m:0,l:0, minutes:60, haul:false};
+    case 'mulch': return {type:'Hardwood Native', yards:3, minutes:120};
+    case 'fert':  return {kind:'Fertilizer', sqft:10000, aerate:false, minutes:90};
+    case 'soil':  return {yards:4, minutes:90};
+  }
+}
+
+/* ---------- calculation (mirrors spreadsheet) ---------- */
+function calc(){
+  const i=cur.inputs, svc=cur.svc; let target=0, minutes=i.minutes||0;
+  if(svc==='mow'){
+    const sqft=(+i.sqft||0)*(i.mowable/100);
+    minutes = sqft/43560*R.minPerAcre;
+    let base = minutes/60*R.targetHr;
+    let total = base;
+    if(i.freq==='Biweekly') total += base*R.biweekly;
+    const fc = i.firstcut==='Light'?R.fcLight:i.firstcut==='Moderate'?R.fcMod:i.firstcut==='Heavy'?R.fcHeavy:0;
+    total += base*fc;
+    if(i.weed) total += R.weedAdd;
+    total += R.fuel;
+    target = Math.max(total, R.jobMin);
+  } else if(svc==='bush'){
+    let sub = i.s*R.bushS + i.m*R.bushM + i.l*R.bushL;
+    if(i.haul) sub += R.haul;
+    target = Math.max(sub, R.bushMin);
+  } else if(svc==='mulch'){
+    target = (R.mulch[i.type]||0) * (+i.yards||0);
+  } else if(svc==='fert'){
+    if(i.kind==='Fertilizer') target = (+i.sqft||0)/1000*R.fertK;
+    else { target = (+i.sqft||0)/1000*R.seedK; if(i.aerate) target += (+i.sqft||0)/1000*R.aerK; }
+  } else if(svc==='soil'){
+    target = (+i.yards||0)*(R.soilCost*(1+R.matMarkup)+R.soilSpread);
+  }
+  return {target, minutes};
+}
+
+/* ---------- estimator UI ---------- */
+function renderEst(){
+  const svc=cur.svc, i=cur.inputs, S=SERVICES.find(s=>s.id===svc);
+  let f='';
+  if(svc==='mow'){
+    f=`
+    ${numField('Lawn size (sq ft)','sqft',i.sqft,'From Google Maps measure tool — the whole parcel is fine.')}
+    <div class="field"><label>% mowable <span class="hint" style="display:inline">(turf, not house/driveway/pool)</span></label>
+      ${slider('mowable',i.mowable)}</div>
+    ${btnGroup('Frequency','freq',['Weekly','Biweekly'],i.freq)}
+    ${btnGroup('First-cut cleanup','firstcut',['None','Light','Moderate','Heavy'],i.firstcut)}
+    ${toggleField('Heavy weed-eating','weed',i.weed)}`;
+  } else if(svc==='bush'){
+    f=`
+    ${stepperField('Small bushes ('+money(R.bushS)+' ea)','s',i.s)}
+    ${stepperField('Medium bushes ('+money(R.bushM)+' ea)','m',i.m)}
+    ${stepperField('Large bushes ('+money(R.bushL)+' ea)','l',i.l)}
+    ${toggleField('Haul away clippings ('+money(R.haul)+')','haul',i.haul)}
+    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
+  } else if(svc==='mulch'){
+    f=`
+    ${selectField('Mulch type','type',Object.keys(R.mulch),i.type)}
+    ${numField('Cubic yards','yards',i.yards)}
+    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
+  } else if(svc==='fert'){
+    f=`
+    ${btnGroup('Service','kind',['Fertilizer','Seed/Overseed'],i.kind)}
+    ${numField('Lawn size (sq ft)','sqft',i.sqft)}
+    ${i.kind==='Seed/Overseed'?toggleField('Add aeration','aerate',i.aerate):''}
+    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
+  } else if(svc==='soil'){
+    f=`
+    ${numField('Cubic yards (3–6 typical)','yards',i.yards)}
+    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
+  }
+  $('#est').innerHTML = `<div style="font-size:22px;font-weight:800;margin:4px 0 2px">${S.emoji} ${S.name}</div>
+    ${f}
+    <div id="readout"></div>
+    <div class="save-row" style="margin-top:6px">
+      <button class="btn ghost" onclick="goHome()">New service</button>
+      <button class="btn primary" onclick="openSave()">Save quote</button>
+    </div>
+    <div style="height:8px"></div>`;
+  refreshReadout();
+}
+
+let quoteOverride = null;
+function refreshReadout(){
+  const {target,minutes}=calc();
+  if(quoteOverride===null) quoteOverride=target;
+  const q = quoteOverride;
+  const hr = minutes>0 ? q/(minutes/60) : null;
+  let note='', cls='';
+  if(hr!==null){
+    if(hr>=R.targetHr){ cls='good'; note=`At ${money(hr)}/hr — at or above your $${R.targetHr} target. 👍`; }
+    else if(hr>=R.targetHr*0.8){ cls='warn'; note=`At ${money(hr)}/hr — a little under your $${R.targetHr} target.`; }
+    else { cls='bad'; note=`At ${money(hr)}/hr — well under your $${R.targetHr} target. You're discounting.`; }
+  }
+  $('#readout').innerHTML = `<div class="readout">
+    <div class="rrow target"><span class="k">Target price (at $${R.targetHr}/hr)</span><span class="v">${money(target)}</span></div>
+    <div class="rrow quote"><span class="k">Your quote</span>
+      <input type="number" inputmode="decimal" value="${Math.round(q)}" onchange="quoteOverride=+this.value;refreshReadout()"></div>
+    ${hr!==null?`<div class="rrow rate"><span class="k">Your hourly rate</span><span class="v" style="color:var(--${cls==='good'?'good':cls==='warn'?'warn':'bad'})">${money(hr)}/hr</span></div>`:''}
+  </div>
+  ${note?`<div class="rate-note ${cls}">${note}</div>`:''}`;
+}
+
+/* ---------- input widgets ---------- */
+function set(k,v){ cur.inputs[k]=v; quoteOverride=null; renderEst(); }
+function setQuiet(k,v){ cur.inputs[k]=v; quoteOverride=null; refreshReadout(); }
+function numField(lbl,k,val,hint){
+  return `<div class="field"><label>${lbl}</label>
+    <input type="number" inputmode="decimal" value="${val}" onchange="setQuiet('${k}',+this.value)" oninput="setQuiet('${k}',+this.value)">
+    ${hint?`<div class="hint">${hint}</div>`:''}</div>`;
+}
+function selectField(lbl,k,opts,val){
+  return `<div class="field"><label>${lbl}</label><select onchange="set('${k}',this.value)">
+    ${opts.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+}
+function btnGroup(lbl,k,opts,val){
+  return `<div class="field"><label>${lbl}</label><div class="btns">
+    ${opts.map(o=>`<button class="opt ${o===val?'on':''}" onclick="set('${k}','${o}')">${o}</button>`).join('')}</div></div>`;
+}
+function toggleField(lbl,k,val){
+  return `<div class="field"><div class="toggle ${val?'on':''}" onclick="set('${k}',${!val})"><span>${lbl}</span><span class="pill"></span></div></div>`;
+}
+function slider(k,val){
+  return `<div style="display:flex;align-items:center;gap:12px">
+    <input type="range" min="20" max="100" step="5" value="${val}" style="flex:1"
+      oninput="document.getElementById('mwv').textContent=this.value+'%';setQuiet('${k}',+this.value)">
+    <span id="mwv" style="font-weight:800;font-size:18px;color:var(--turf-deep);min-width:48px;text-align:right">${val}%</span></div>`;
+}
+function stepperField(lbl,k,val){
+  return `<div class="field"><label>${lbl}</label>
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="opt" style="flex:none;width:52px;font-size:22px" onclick="step('${k}',-1)">−</button>
+      <span style="font-size:24px;font-weight:800;min-width:40px;text-align:center" id="st-${k}">${val}</span>
+      <button class="opt" style="flex:none;width:52px;font-size:22px" onclick="step('${k}',1)">+</button>
+    </div></div>`;
+}
+function step(k,d){ cur.inputs[k]=Math.max(0,(cur.inputs[k]||0)+d); quoteOverride=null; renderEst(); }
+
+/* ---------- saving ---------- */
+function openSave(){ $('#custName').value=''; $('#custAddr').value=''; $('#saveDlg').showModal(); }
+async function confirmSave(){
+  const name=$('#custName').value.trim()||'Unnamed';
+  const addr=$('#custAddr').value.trim();
+  const {target,minutes}=calc();
+  const S=SERVICES.find(s=>s.id===cur.svc);
+  const hr = minutes>0 ? Math.round(quoteOverride/(minutes/60)) : '';
+  const q={ id:Date.now()+''+Math.floor(Math.random()*999), customer:name, addr,
+    svc:S.name, emoji:S.emoji, amount:quoteOverride, target, hr, date:new Date().toISOString() };
+  await DB.saveQuote(q);
+  $('#saveDlg').close();
+  copyRow(q);
+  toast('Saved · row copied — paste in Google Sheet');
+}
+/* tab-separated row matching the Saved Quotes tab columns */
+function rowText(q){
+  const d=new Date(q.date).toLocaleDateString();
+  return [d,q.customer,q.addr||'',q.svc,Math.round(q.amount),Math.round(q.target),q.hr||''].join('\t');
+}
+function copyRow(q){
+  const txt=rowText(q);
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).catch(()=>fallbackCopy(txt)); }
+  else fallbackCopy(txt);
+}
+function fallbackCopy(txt){
+  const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); try{document.execCommand('copy')}catch(e){} document.body.removeChild(ta);
+}
+
+/* ---------- saved view ---------- */
+async function renderSaved(){
+  const quotes = await DB.listQuotes();
+  if(!quotes.length){
+    $('#saved').innerHTML=`<div class="empty"><div class="big">📋</div>No saved quotes yet.<br>Make an estimate and tap <b>Save quote</b>.</div>`;
+    return;
+  }
+  quotes.sort((a,b)=>b.date.localeCompare(a.date));
+  const byCust={};
+  quotes.forEach(q=>{(byCust[q.customer]=byCust[q.customer]||[]).push(q)});
+  let html='';
+  for(const c in byCust){
+    const list=byCust[c]; const addr=list.find(x=>x.addr)?.addr||'';
+    html+=`<div class="cust"><h3>${c}</h3>${addr?`<div class="meta">${addr}</div>`:''}
+      ${list.map(q=>`<div class="qitem">
+        <span class="svc-tag">${q.emoji} ${q.svc} <span style="color:var(--muted);font-weight:400">· ${new Date(q.date).toLocaleDateString()}</span></span>
+        <span><span class="amt">${money(q.amount)}</span>
+          <button class="opt" style="flex:none;padding:4px 9px;margin-left:6px;font-size:12px" onclick='copyRowById("${q.id}")'>⧉</button>
+          <button class="opt" style="flex:none;padding:4px 9px;margin-left:4px;font-size:12px" onclick="delQuote('${q.id}')">✕</button></span>
+      </div>`).join('')}</div>`;
+  }
+  html+=`<button class="btn ghost" onclick="exportData()">⤓ Export backup (all quotes)</button>`;
+  $('#saved').innerHTML=html;
+}
+async function delQuote(id){ await DB.delQuote(id); renderSaved(); toast('Deleted'); }
+async function copyRowById(id){
+  const quotes=await DB.listQuotes(); const q=quotes.find(x=>x.id===id);
+  if(q){ copyRow(q); toast('Row copied — paste in Google Sheet'); }
+}
+async function exportData(){
+  const quotes=await DB.listQuotes();
+  const rows=[['Customer','Address','Service','Quote','Target','Date']];
+  quotes.forEach(q=>rows.push([q.customer,q.addr||'',q.svc,q.amount,Math.round(q.target),new Date(q.date).toLocaleDateString()]));
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='yard-quotes-backup.csv'; a.click();
+  toast('Backup downloaded');
+}
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  const f=[
+    ['Target hourly rate ($)','targetHr'],['Job minimum ($)','jobMin'],
+    ['Biweekly upcharge (%)','biweekly',true],['Material markup (%)','matMarkup',true],
+    ['Fuel / trip charge ($)','fuel'],['Minutes per acre','minPerAcre'],
+    ['First-cut light (%)','fcLight',true],['First-cut moderate (%)','fcMod',true],
+    ['First-cut heavy (%)','fcHeavy',true],['Heavy weed-eating add ($)','weedAdd'],
+    ['Small bush ($)','bushS'],['Medium bush ($)','bushM'],['Large bush ($)','bushL'],
+    ['Bush job minimum ($)','bushMin'],['Haul-away fee ($)','haul'],
+    ['Fertilizer $/1,000 sqft','fertK'],['Seed $/1,000 sqft','seedK'],
+    ['Aeration $/1,000 sqft','aerK'],['Topsoil cost $/yard','soilCost'],['Topsoil spread $/yard','soilSpread'],
+  ];
+  $('#settings').innerHTML = `<div class="hint" style="margin:2px 0 10px">Changes save automatically and apply to every new estimate.</div>`+
+    f.map(([lbl,k,pct])=>`<div class="field"><label>${lbl}</label>
+      <input type="number" inputmode="decimal" value="${pct?Math.round(R[k]*100):R[k]}"
+       onchange="updR('${k}',this.value,${!!pct})"></div>`).join('')+
+    `<button class="btn ghost" onclick="resetR()">Reset to defaults</button><div style="height:20px"></div>`;
+}
+async function updR(k,v,pct){ R[k]=pct?(+v/100):(+v); await DB.setSettings(R); toast('Saved'); }
+async function resetR(){ R={...DEFAULTS}; await DB.setSettings(R); renderSettings(); toast('Reset to defaults'); }
+
+/* hook settings screen render */
+const _show=showScreen;
+showScreen=function(id){ if(id==='settings') renderSettings(); _show(id); };
+
+/* ---------- init ---------- */
+(async function init(){
+  const s=await DB.getSettings(); if(s) R={...DEFAULTS,...s};
+  renderHome();
+})();
+</script>
