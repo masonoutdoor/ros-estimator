@@ -161,19 +161,25 @@ const DB = {
 /* ---------- default rates (mirror the spreadsheet) ---------- */
 const DEFAULTS = {
   targetHr:95, jobMin:45, matMarkup:0.30, biweekly:0.30, fuel:0,
-  minPerAcre:90, fcLight:0.25, fcMod:0.50, fcHeavy:1.00, weedAdd:25,
+  minPerAcre:90, fcLight:0.25, fcMod:0.50, fcHeavy:1.00,
+  weedLight:10, weedMed:25, weedHeavy:50,
+  cleanLight:75, cleanMod:150, cleanHeavy:300,
   bushS:8, bushM:15, bushL:25, bushMin:75, haul:35,
-  fertK:12, seedK:18, aerK:16, soilCost:35, soilSpread:30,
+  // Lawn Restoration (from your calculator)
+  minLabor:95, laborRate:95, topsoilInstalled:55, starterFert:65, premiumFert:85,
+  fertCoverage:10000, bermudaSeed:9, fescueSeed:4, ryeSeed:3,
+  overseedRate:1.5, bareDirtRate:3.0, rototilling:95, restCleanup:95,
+  diffMod:0.15, diffHard:0.25,
   mulch:{"Hardwood Native":120,"Shredded Hardwood":135,"Black Dyed":145,"Brown Dyed":145,"Red Dyed":145,"Cedar Mulch":160,"Pine Bark":165}
 };
 let R = {...DEFAULTS};
 
 const SERVICES = [
   {id:'mow',  emoji:'🚜', name:'Mowing',        sub:'per visit'},
+  {id:'clean',emoji:'🧹', name:'First Cleanup',  sub:'overgrown / debris'},
   {id:'bush', emoji:'✂️', name:'Bush Trimming', sub:'per bush'},
   {id:'mulch',emoji:'🪵', name:'Mulch',         sub:'per yard'},
-  {id:'fert', emoji:'🌱', name:'Fert / Seed',   sub:'per sq ft'},
-  {id:'soil', emoji:'🟤', name:'Topsoil',       sub:'per yard'},
+  {id:'rest', emoji:'🌱', name:'Lawn Restoration', sub:'seed / fert / level'},
 ];
 
 /* ---------- helpers ---------- */
@@ -212,11 +218,12 @@ function openEst(svc){
 }
 function defaultInputs(svc){
   switch(svc){
-    case 'mow':   return {sqft:'', mowable:65, freq:'Weekly', firstcut:'None', weed:false, minutes:0};
+    case 'mow':   return {sqft:'', mowable:65, freq:'Weekly', weed:'None', minutes:0};
+    case 'clean': return {level:'Light'};
     case 'bush':  return {s:0,m:0,l:0, minutes:60, haul:false};
     case 'mulch': return {type:'Hardwood Native', yards:3, minutes:120};
-    case 'fert':  return {kind:'Fertilizer', sqft:10000, aerate:false, minutes:90};
-    case 'soil':  return {yards:4, minutes:90};
+    case 'rest':  return {lawn:13000, bare:0, depth:0.45, grass:'Bermuda', fert:'Starter Fertilizer',
+                          rototill:false, cleanup:false, difficulty:'Normal', minutes:0};
   }
 }
 
@@ -229,22 +236,31 @@ function calc(){
     let base = minutes/60*R.targetHr;
     let total = base;
     if(i.freq==='Biweekly') total += base*R.biweekly;
-    const fc = i.firstcut==='Light'?R.fcLight:i.firstcut==='Moderate'?R.fcMod:i.firstcut==='Heavy'?R.fcHeavy:0;
-    total += base*fc;
-    if(i.weed) total += R.weedAdd;
+    const weed = i.weed==='Light'?R.weedLight:i.weed==='Medium'?R.weedMed:i.weed==='Heavy'?R.weedHeavy:0;
+    total += weed;
     total += R.fuel;
     target = Math.max(total, R.jobMin);
+  } else if(svc==='clean'){
+    target = i.level==='Light'?R.cleanLight:i.level==='Moderate'?R.cleanMod:R.cleanHeavy;
   } else if(svc==='bush'){
     let sub = i.s*R.bushS + i.m*R.bushM + i.l*R.bushL;
     if(i.haul) sub += R.haul;
     target = Math.max(sub, R.bushMin);
   } else if(svc==='mulch'){
     target = (R.mulch[i.type]||0) * (+i.yards||0);
-  } else if(svc==='fert'){
-    if(i.kind==='Fertilizer') target = (+i.sqft||0)/1000*R.fertK;
-    else { target = (+i.sqft||0)/1000*R.seedK; if(i.aerate) target += (+i.sqft||0)/1000*R.aerK; }
-  } else if(svc==='soil'){
-    target = (+i.yards||0)*(R.soilCost*(1+R.matMarkup)+R.soilSpread);
+  } else if(svc==='rest'){
+    // mirrors your Lawn Restoration Calculator
+    const lawn=+i.lawn||0, bare=+i.bare||0, depth=+i.depth||0;
+    const topYd = (bare*(depth/12))/27;
+    const seedLbs = (lawn*R.overseedRate/1000)+(bare*R.bareDirtRate/1000);
+    const fertBags = Math.ceil((lawn+bare)/R.fertCoverage);
+    const seedRate = i.grass==='Bermuda'?R.bermudaSeed:i.grass==='Fescue'?R.fescueSeed:R.ryeSeed;
+    const fertRate = i.fert==='Starter Fertilizer'?R.starterFert:R.premiumFert;
+    const material = topYd*R.topsoilInstalled + seedLbs*seedRate + fertBags*fertRate;
+    const labor = Math.max(R.minLabor, (i.rototill?R.rototilling:0)+(i.cleanup?R.restCleanup:0));
+    const diff = i.difficulty==='Moderate'?R.diffMod:i.difficulty==='Difficult'?R.diffHard:0;
+    target = (material+labor)*(1+diff);
+    cur._rest = {topYd, seedLbs, fertBags}; // for display
   }
   return {target, minutes};
 }
@@ -259,8 +275,12 @@ function renderEst(){
     <div class="field"><label>% mowable <span class="hint" style="display:inline">(turf, not house/driveway/pool)</span></label>
       ${slider('mowable',i.mowable)}</div>
     ${btnGroup('Frequency','freq',['Weekly','Biweekly'],i.freq)}
-    ${btnGroup('First-cut cleanup','firstcut',['None','Light','Moderate','Heavy'],i.firstcut)}
-    ${toggleField('Heavy weed-eating','weed',i.weed)}`;
+    ${btnGroup('Weed-eating / trimming','weed',['None','Light','Medium','Heavy'],i.weed)}`;
+  } else if(svc==='clean'){
+    f=`
+    <div class="hint" style="margin:2px 0 12px">A first cleanup of an overgrown or debris-filled yard, priced on its own — separate from a regular mow.</div>
+    ${btnGroup('Cleanup level','level',['Light','Moderate','Heavy'],i.level)}
+    <div class="hint">Light ${money(R.cleanLight)} · Moderate ${money(R.cleanMod)} · Heavy ${money(R.cleanHeavy)} — set in Settings.</div>`;
   } else if(svc==='bush'){
     f=`
     ${stepperField('Small bushes ('+money(R.bushS)+' ea)','s',i.s)}
@@ -273,16 +293,22 @@ function renderEst(){
     ${selectField('Mulch type','type',Object.keys(R.mulch),i.type)}
     ${numField('Cubic yards','yards',i.yards)}
     ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
-  } else if(svc==='fert'){
+  } else if(svc==='rest'){
+    const rr=cur._rest||{topYd:0,seedLbs:0,fertBags:0};
     f=`
-    ${btnGroup('Service','kind',['Fertilizer','Seed/Overseed'],i.kind)}
-    ${numField('Lawn size (sq ft)','sqft',i.sqft)}
-    ${i.kind==='Seed/Overseed'?toggleField('Add aeration','aerate',i.aerate):''}
-    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
-  } else if(svc==='soil'){
-    f=`
-    ${numField('Cubic yards (3–6 typical)','yards',i.yards)}
-    ${numField('Time on site (min)','minutes',i.minutes,'Used only to check your hourly rate.')}`;
+    ${numField('Lawn area (sq ft)','lawn',i.lawn,'Total turf area being treated.')}
+    ${numField('Bare / dirt area (sq ft)','bare',i.bare,'Areas needing topsoil + heavier seeding.')}
+    ${numField('Topsoil depth (inches)','depth',i.depth)}
+    ${btnGroup('Grass type','grass',['Bermuda','Fescue','Rye'],i.grass)}
+    ${btnGroup('Fertilizer','fert',['Starter Fertilizer','Premium'],i.fert)}
+    ${toggleField('Rototilling ('+money(R.rototilling)+')','rototill',i.rototill)}
+    ${toggleField('Cleanup / blowing ('+money(R.restCleanup)+')','cleanup',i.cleanup)}
+    ${btnGroup('Difficulty','difficulty',['Normal','Moderate','Difficult'],i.difficulty)}
+    <div class="readout" id="restQty" style="margin:14px 0 0;padding:6px 16px 14px">
+      <div class="rrow"><span class="k">Topsoil needed</span><span class="v" style="font-size:15px">${rr.topYd.toFixed(1)} yd</span></div>
+      <div class="rrow"><span class="k">Seed needed</span><span class="v" style="font-size:15px">${rr.seedLbs.toFixed(1)} lbs</span></div>
+      <div class="rrow"><span class="k">Fertilizer bags</span><span class="v" style="font-size:15px">${rr.fertBags}</span></div>
+    </div>`;
   }
   $('#est').innerHTML = `<div style="font-size:22px;font-weight:800;margin:4px 0 2px">${S.emoji} ${S.name}</div>
     ${f}
@@ -298,6 +324,13 @@ function renderEst(){
 let quoteOverride = null;
 function refreshReadout(){
   const {target,minutes}=calc();
+  if(cur.svc==='rest' && cur._rest){
+    const q=document.getElementById('restQty');
+    if(q) q.innerHTML=`
+      <div class="rrow"><span class="k">Topsoil needed</span><span class="v" style="font-size:15px">${cur._rest.topYd.toFixed(1)} yd</span></div>
+      <div class="rrow"><span class="k">Seed needed</span><span class="v" style="font-size:15px">${cur._rest.seedLbs.toFixed(1)} lbs</span></div>
+      <div class="rrow"><span class="k">Fertilizer bags</span><span class="v" style="font-size:15px">${cur._rest.fertBags}</span></div>`;
+  }
   if(quoteOverride===null) quoteOverride=target;
   const q = quoteOverride;
   const hr = minutes>0 ? q/(minutes/60) : null;
@@ -423,15 +456,20 @@ async function exportData(){
 /* ---------- settings ---------- */
 function renderSettings(){
   const f=[
-    ['Target hourly rate ($)','targetHr'],['Job minimum ($)','jobMin'],
-    ['Biweekly upcharge (%)','biweekly',true],['Material markup (%)','matMarkup',true],
-    ['Fuel / trip charge ($)','fuel'],['Minutes per acre','minPerAcre'],
-    ['First-cut light (%)','fcLight',true],['First-cut moderate (%)','fcMod',true],
-    ['First-cut heavy (%)','fcHeavy',true],['Heavy weed-eating add ($)','weedAdd'],
+    ['Target hourly rate ($)','targetHr'],['Mowing job minimum ($)','jobMin'],
+    ['Biweekly upcharge (%)','biweekly',true],['Fuel / trip charge ($)','fuel'],
+    ['Minutes per acre','minPerAcre'],
+    ['Weed-eating light ($)','weedLight'],['Weed-eating medium ($)','weedMed'],['Weed-eating heavy ($)','weedHeavy'],
+    ['Cleanup light ($)','cleanLight'],['Cleanup moderate ($)','cleanMod'],['Cleanup heavy ($)','cleanHeavy'],
     ['Small bush ($)','bushS'],['Medium bush ($)','bushM'],['Large bush ($)','bushL'],
     ['Bush job minimum ($)','bushMin'],['Haul-away fee ($)','haul'],
-    ['Fertilizer $/1,000 sqft','fertK'],['Seed $/1,000 sqft','seedK'],
-    ['Aeration $/1,000 sqft','aerK'],['Topsoil cost $/yard','soilCost'],['Topsoil spread $/yard','soilSpread'],
+    ['Restoration min labor ($)','minLabor'],['Topsoil installed $/yard','topsoilInstalled'],
+    ['Starter fert $/bag','starterFert'],['Premium fert $/bag','premiumFert'],
+    ['Fert coverage (sq ft/bag)','fertCoverage'],
+    ['Bermuda seed $/lb','bermudaSeed'],['Fescue seed $/lb','fescueSeed'],['Rye seed $/lb','ryeSeed'],
+    ['Overseed rate (lb/1,000)','overseedRate'],['Bare dirt seed rate (lb/1,000)','bareDirtRate'],
+    ['Rototilling ($)','rototilling'],['Restoration cleanup ($)','restCleanup'],
+    ['Difficulty: moderate (%)','diffMod',true],['Difficulty: difficult (%)','diffHard',true],
   ];
   $('#settings').innerHTML = `<div class="hint" style="margin:2px 0 10px">Changes save automatically and apply to every new estimate.</div>`+
     f.map(([lbl,k,pct])=>`<div class="field"><label>${lbl}</label>
